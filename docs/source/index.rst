@@ -7,6 +7,7 @@ PostgresDB
 .. autoclass:: elephant_parsel.postgres_db.PostgresDB
     :members:
     :undoc-members:
+    :special-members: __init__
 
 
 .. autoclass:: elephant_parsel.postgres_db.PostgresTransaction

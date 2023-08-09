@@ -103,6 +103,11 @@ def _format_rows(rows: list, map_row, column) -> list:
 
 
 class PostgresTransaction:
+    """
+    Objects of this class should only be obtained by calling `PostgresDB(...).transaction()`.
+
+    The methods of this class work just like the methods of `PostgresDB`.
+    """
     def __init__(self, db):
         self._db = db
         self.connection = None
@@ -170,7 +175,16 @@ class PostgresDB:
     def __init__(self, connection_config: dict, logger: Logger, connect=True, register_hstore=False,
                  register_uuid=False):
         """
-        :param connection_config: attributes host, port, user, dbname, password, minconn, maxconn
+        :param connection_config: This dict will be used as kwargs for the `psycopg2.pool.ThreadedConnectionPool`.
+
+               Available settings are `minconn`, `maxconn` and all libpq connection variables, see
+               https://www.postgresql.org/docs/current/libpq-connect.html#LIBPQ-PARAMKEYWORDS
+
+               The `minconn` and `maxconn` both default to 1 and will be set to 1 if lower than 1.
+        :param logger: some standard python logger
+        :param connect: whether to call `login()` immediately (upon initialization)
+        :param register_hstore: set this to `True` if you want to use the PostgreSQL *hstore* data type
+        :param register_uuid: set this to `True` if you want to use the PostgreSQL *uuid* data type
         """
         self.log = logger
         self.config = connection_config
@@ -184,12 +198,19 @@ class PostgresDB:
             self.login()
 
     def censored_config(self):
+        """
+        Return a copy of the connection_config dict, but replace the "password" field with `'censored'` when present.
+        """
         censored_config = dict(self.config)
         if 'password' in censored_config:
             censored_config['password'] = 'censored'
         return censored_config
 
     def login(self):
+        """
+        Initialize the connection pool. If `register_hstore` is `True`, a connection will be opened to globally register
+        the `hstore` type for psycopg2.
+        """
         try:
             self.log.debug(f'opening database connection pool {self.censored_config()}')
             self._pool = ThreadedConnectionPool(**self.config)
@@ -203,6 +224,9 @@ class PostgresDB:
                                       f'exception={str(e)}', e)
 
     def logout(self):
+        """
+        Close all connections in the pool.
+        """
         if self._pool:
             self.log.debug(f'closing database connection pool {self.censored_config()}')
             self._pool.closeall()
@@ -212,6 +236,15 @@ class PostgresDB:
         self.logout()
 
     def transaction(self):
+        """
+        Create a `PostgresTransaction`. Use this with a context manager to run multiple statements
+        in a PostgreSQL transaction.
+
+        >>> with PostgresDB(...).transaction() as transaction:
+        >>>     transaction.execute('lock table t in exclusive mode')
+        >>>     # you can do some other stuff between the statements
+        >>>     return transaction.query_all('update t set col1=1 where col1=2 returning col2', column='col2')
+        """
         return PostgresTransaction(self)
 
     def _attempt_transaction_twice(self, use_transaction: Callable[[PostgresTransaction], Any]):
@@ -242,9 +275,13 @@ class PostgresDB:
 
     def execute_values(self, statement: str, arguments: list, template: str = None, map_row=None, column: str = None):
         """
-        Like query_all, but with a list of arguments:
-        statement must contain a single %s placeholder. args must be a list of sequences or mappings.
-        template can be a string with placeholders, which will be used for each item.
+        Like `query_all`, but with a list of arguments:
+
+        :param statement: must contain a single `%s` placeholder
+        :param arguments: must be a list of sequences or mappings
+        :param template: can be a string with placeholders, which will be used for each item
+        :param map_row: a callable which receives the returned columns as kwargs. The result replaces the row.
+        :param column: the name of the sole column which shall be returned.
         see https://www.psycopg.org/docs/extras.html#psycopg2.extras.execute_values
         """
 
