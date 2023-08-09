@@ -225,13 +225,13 @@ class PostgresDB:
             with self.transaction() as transaction:
                 return use_transaction(transaction)
 
-    def query_one(self, statement: str, arguments: Union[Tuple, dict], map_row=None, column: str = None):
+    def query_one(self, statement: str, arguments: Union[Tuple, dict] = None, map_row=None, column: str = None):
         def use_transaction(transaction):
             return transaction.query_one(statement, arguments, map_row, column)
 
         return self._attempt_transaction_twice(use_transaction)
 
-    def query_all(self, statement: str, arguments: Union[Tuple, dict], map_row=None, column: str = None):
+    def query_all(self, statement: str, arguments: Union[Tuple, dict] = None, map_row=None, column: str = None):
         def use_transaction(transaction):
             return transaction.query_all(statement, arguments, map_row, column)
 
