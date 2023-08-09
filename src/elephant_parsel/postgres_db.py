@@ -167,7 +167,8 @@ class PostgresTransaction:
 class PostgresDB:
     _dict_cursor_factory = psycopg2.extras.DictCursor
 
-    def __init__(self, connection_config: dict, logger: Logger, connect=True, register_hstore=False):
+    def __init__(self, connection_config: dict, logger: Logger, connect=True, register_hstore=False,
+                 register_uuid=False):
         """
         :param connection_config: attributes host, port, user, dbname, password, minconn, maxconn
         """
@@ -176,6 +177,8 @@ class PostgresDB:
         self.config['minconn'] = max(self.config.get('minconn', None) or 1, 1)
         self.config['maxconn'] = max(self.config.get('maxconn', None) or 1, 1)
         self.register_hstore = register_hstore
+        if register_uuid:
+            psycopg2.extras.register_uuid()
         self._pool = None
         if connect:
             self.login()
