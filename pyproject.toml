@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "elephant_parsel"
-version = "1.1.0"
+version = "1.1.1"
 authors = [
   { name="betanummeric", email="40263343+betanummeric@users.noreply.github.com" },
 ]
@@ -23,4 +23,4 @@ classifiers = [
 [project.urls]
 "Homepage" = "https://github.com/betanummeric/elephant_parsel"
 "Bug Tracker" = "https://github.com/betanummeric/elephant_parsel/issues"
-
+"Documentation" = "https://elephant-parsel.readthedocs.io/en/latest/"
