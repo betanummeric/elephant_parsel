@@ -32,4 +32,4 @@ server_version_string = db.query_one('select version()', None, column='version')
 ```
 The `connection_config` is used as kwargs for the `psycopg2.ThreadedConnectionPool`, so it should support all libpq connection variables: https://www.postgresql.org/docs/current/libpq-connect.html#LIBPQ-PARAMKEYWORDS
 
-
+API docs: https://elephant-parsel.readthedocs.io/en/latest/
