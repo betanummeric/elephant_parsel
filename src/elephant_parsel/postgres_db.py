@@ -228,7 +228,10 @@ class PostgresDB:
         Close all connections in the pool.
         """
         if self._pool:
-            self.log.debug(f'closing database connection pool {self.censored_config()}')
+            try:
+                self.log.debug(f'closing database connection pool {self.censored_config()}')
+            except Exception:
+                pass  # the logger may be deleted before PostgresDB, just skip logging then
             self._pool.closeall()
             self._pool = None
 
