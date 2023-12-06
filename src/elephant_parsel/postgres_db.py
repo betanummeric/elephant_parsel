@@ -294,6 +294,13 @@ class PostgresDB:
         return self._attempt_transaction_twice(use_transaction)
 
     def execute(self, statement: str, arguments=None, use_transaction: bool = True):
+        """
+        Run the statement, returning nothing.
+        :param statement: SQL string to execute, can contain %-placeholders
+        :param arguments: tuple or dict to be used as placeholder values of the statement
+        :param use_transaction: When True, enclose the statement in a database transaction.
+            Otherwise, run it with autocommit=True.
+        """
         if use_transaction:
             def _use_transaction(transaction):
                 return transaction.execute(statement, arguments)
