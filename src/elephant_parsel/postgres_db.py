@@ -6,7 +6,7 @@ from typing import Union, Tuple, Callable, Any
 import psycopg2
 import psycopg2.extras
 from psycopg2.extras import DictCursor
-from psycopg2.pool import ThreadedConnectionPool
+from psycopg2.pool import PoolError, AbstractConnectionPool
 
 
 def __backported_split_sql(sql):
@@ -102,12 +102,67 @@ def _format_rows(rows: list, map_row, column) -> list:
     return rows
 
 
+class WaitingThreadedConnectionPool(AbstractConnectionPool):
+    """
+    Just like ThreadedConnectionPool, but when pool_timeout is specified,
+    getconn() will wait and retry upon an exhausted pool.
+    """
+
+    def __init__(self, minconn, maxconn, pool_timeout=None, *args, **kwargs):
+        """Initialize the threading lock."""
+        import threading
+        AbstractConnectionPool.__init__(
+            self, minconn, maxconn, *args, **kwargs)
+        self._lock = threading.Lock()
+        self._condition = threading.Condition(threading.Lock())
+        if pool_timeout is not None and pool_timeout < 0:
+            raise ValueError('pool_timeout must be None or >=0')
+        self._pool_timeout = pool_timeout
+
+    def getconn(self, key=None):
+        """
+        Get a free connection and assign it to 'key' if not None.
+
+        This only differs from ThreadedConnectionPool.geconn when the pool is exhausted and pool_timeout is set to a
+        positive number. In this case, it waits up to pool_timeout seconds and then attempts a second time to get a
+        connection. If a connection is returned to the pool during waiting, this function proceeds immediately.
+        """
+        try:
+            with self._lock:
+                return self._getconn(key)
+        except PoolError:
+            if self.closed:
+                raise
+        with self._condition:
+            self._condition.wait(self._pool_timeout)
+        with self._lock:
+            return self._getconn(key)
+
+    def putconn(self, conn=None, key=None, close=False):
+        """Put away an unused connection."""
+        with self._lock:
+            pool_before = len(self._pool)
+            self._putconn(conn, key, close)
+            pool_increased = len(self._pool) > pool_before
+        if pool_increased:
+            with self._condition:
+                self._condition.notify()
+
+    def closeall(self):
+        """Close all connections (even the one currently in use.)"""
+        with self._lock:
+            self._closeall()
+        with self._condition:
+            self._condition.notify_all()
+
+
 class PostgresTransaction:
     """
     Objects of this class should only be obtained by calling `PostgresDB(...).transaction()`.
 
     The methods of this class work just like the methods of `PostgresDB`.
     """
+
     def __init__(self, db):
         self._db = db
         self.connection = None
@@ -177,10 +232,14 @@ class PostgresDB:
         """
         :param connection_config: This dict will be used as kwargs for the `psycopg2.pool.ThreadedConnectionPool`.
 
-               Available settings are `minconn`, `maxconn` and all libpq connection variables, see
+               Available settings are `minconn`, `maxconn`, `pool_timeout` and all libpq connection variables, see
                https://www.postgresql.org/docs/current/libpq-connect.html#LIBPQ-PARAMKEYWORDS
 
                The `minconn` and `maxconn` both default to 1 and will be set to 1 if lower than 1.
+
+               `pool_timeout` can be set to a number of seconds (int/float). When not set (default, None, 0),
+               any "pool exhausted"-error will be raised immediately. When set, more attempts will be made
+               to get a connection from the pool until `pool_timeout` has elapsed.
         :param logger: some standard python logger
         :param connect: whether to call `login()` immediately (upon initialization)
         :param register_hstore: set this to `True` if you want to use the PostgreSQL *hstore* data type
@@ -213,7 +272,7 @@ class PostgresDB:
         """
         try:
             self.log.debug(f'opening database connection pool {self.censored_config()}')
-            self._pool = ThreadedConnectionPool(**self.config)
+            self._pool = WaitingThreadedConnectionPool(**self.config)
             if self.register_hstore:
                 conn = self._pool.getconn()
                 psycopg2.extras.register_hstore(conn, globally=True)
