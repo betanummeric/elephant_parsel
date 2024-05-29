@@ -90,7 +90,7 @@ def _backported_execute_values(cur, sql, argslist, template=None, page_size=100,
     return result
 
 
-class PostgresDBException(BaseException):
+class PostgresDBException(Exception):
     pass
 
 
